@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CutClipper</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f5f7;color:#1d1d1f;line-height:1.5;padding:36px 20px;max-width:640px;margin:0 auto}
+h1{font-size:22px;font-weight:700;letter-spacing:-0.3px;text-align:center}
+.subtitle{color:#86868b;font-size:14px;margin-top:6px;margin-bottom:24px;text-align:center}
+.dropzone{border:2px dashed #d2d2d7;border-radius:14px;padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;background:#fafafa}
+.dropzone:hover,.dropzone.drag{border-color:#0071e3;background:#f0f7ff}
+.dropzone p{color:#6e6e73;font-size:15px}
+.panel{background:#fff;border-radius:14px;padding:24px 28px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.panel h3{font-size:12px;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;padding-bottom:6px;border-bottom:1px solid #f0f0f0}
+.info-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+.info-grid .label{color:#86868b}
+.spot-list{list-style:none;padding:0}
+.spot-list li{padding:8px 12px;margin:4px 0;background:#fafafa;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;border:1px solid transparent;transition:all .15s}
+.spot-list li:hover{border-color:#0071e3;background:#f0f7ff}
+.spot-list li.selected{border-color:#0071e3;background:#f0f7ff}
+.spot-list li .dot{width:12px;height:12px;border-radius:50%;border:1px solid #d2d2d7}
+.setting-row{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px}
+.setting-row label{cursor:pointer;display:flex;align-items:center;gap:6px}
+input[type=number]{width:70px;padding:6px 8px;background:#fafafa;border:1px solid #d2d2d7;border-radius:8px;color:#1d1d1f;font-size:14px;font-family:inherit;text-align:center}
+input[type=number]:focus{outline:none;border-color:#0071e3;box-shadow:0 0 0 3px rgba(0,113,227,0.15);background:#fff}
+input[type=checkbox],input[type=radio]{accent-color:#0071e3}
+.btn{padding:10px 24px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;margin-right:8px;margin-top:8px}
+.btn-primary{background:#0071e3;color:#fff}
+.btn-primary:hover{background:#0077ed;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,113,227,0.3)}
+.btn-primary:disabled{background:#d2d2d7;color:#999;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-download{background:#f5f5f7;color:#1d1d1f;border:1px solid #d2d2d7}
+.btn-download:hover{background:#e8e8ed}
+.status{margin-top:12px;padding:10px;font-size:12px;color:#86868b;font-family:'SF Mono','Courier New',monospace;max-height:200px;overflow-y:auto;background:#fafafa;border:1px solid #f0f0f0;border-radius:8px;white-space:pre-wrap;display:none}
+.preview-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.preview-box{position:relative;background:#fafafa;border:1px solid #d2d2d7;border-radius:8px;overflow:hidden}
+.preview-box canvas{display:block}
+.preview-stats{font-size:12px;color:#6e6e73;min-width:160px}
+.preview-stats div{margin:3px 0}
+.preview-stats .val{color:#0071e3;font-weight:600}
+.legend{display:flex;gap:14px;margin-top:8px;font-size:11px;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .swatch{width:14px;height:3px;border-radius:1px}
+.page-nav{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px}
+.page-nav button{background:#fafafa;border:1px solid #d2d2d7;color:#1d1d1f;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:13px;transition:all .15s}
+.page-nav button:hover{border-color:#0071e3;background:#f0f7ff}
+.page-nav button:disabled{opacity:.4;cursor:not-allowed}
+</style>
+</head>
+<body>
+
+<h1>CutClipper</h1>
+<p class="subtitle">Clip oversized cut vectors to page/bleed boundaries &amp; add bounding cut contours</p>
+
+<div id="dropzone" class="dropzone">
+  <p>Drop PDF here or click to browse</p>
+  <input type="file" id="fileInput" accept=".pdf" style="display:none">
+</div>
+
+<div id="fileInfo" class="panel" style="display:none">
+  <h3>File Info</h3>
+  <div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div id="spotPanel" class="panel" style="display:none">
+  <h3>Select Cut Spot Color</h3>
+  <ul class="spot-list" id="spotList"></ul>
+</div>
+
+<div id="clipPanel" class="panel" style="display:none">
+  <h3>Clip Settings</h3>
+  <div class="setting-row">
+    <label><input type="radio" name="clipMode" value="page" checked> Clip to page edge</label>
+  </div>
+  <div class="setting-row">
+    <label><input type="radio" name="clipMode" value="bleed"> Clip with bleed:</label>
+    <input type="number" id="bleedVal" value="0.125" min="0" max="6" step="0.0625"> inches beyond page
+  </div>
+  <hr style="border-color:#f0f0f0;margin:12px 0">
+  <div class="setting-row">
+    <label><input type="checkbox" id="chkInner" checked> Inner bounding box (at clip boundary)</label>
+  </div>
+  <div class="setting-row">
+    <label><input type="checkbox" id="chkOuter" checked> Outer bounding box (¼″ outside inner)</label>
+  </div>
+</div>
+
+<div id="previewPanel" class="panel" style="display:none">
+  <h3>Preview</h3>
+  <div class="page-nav">
+    <button id="prevPage" disabled>&laquo; Prev</button>
+    <span id="pageLabel">Page 1 / 1</span>
+    <button id="nextPage" disabled>Next &raquo;</button>
+  </div>
+  <div class="preview-wrap">
+    <div class="preview-box"><canvas id="previewCanvas" width="280" height="600"></canvas></div>
+    <div>
+      <div class="preview-stats" id="previewStats"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:rgba(220,40,40,.5)"></span> Original cut</span>
+        <span><span class="swatch" style="background:rgba(0,160,60,.9)"></span> Clipped cut</span>
+        <span><span class="swatch" style="background:rgba(0,113,227,.8)"></span> Bounding box</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="actionPanel" style="display:none">
+  <button id="processBtn" class="btn btn-primary">Process &amp; Download</button>
+</div>
+
+<div id="status" class="status"></div>
+
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ========== UTILITIES ========== */
+function latin1(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);return s}
+function toBytes(str){const b=new Uint8Array(str.length);for(let i=0;i<str.length;i++)b[i]=str.charCodeAt(i)&0xFF;return b}
+function fmtNum(n){if(Number.isInteger(n)&&Math.abs(n)<1e12)return n.toString();let s=n.toFixed(4);if(s.includes('.'))s=s.replace(/0+$/,'').replace(/\.$/,'');return s||'0'}
+function numVal(el){const v=parseFloat(el.value);return isNaN(v)?0:v}
+
+function multiplyCTM(m1,m2){
+  const[a1,b1,c1,d1,e1,f1]=m1,[a2,b2,c2,d2,e2,f2]=m2;
+  return[a1*a2+c1*b2,b1*a2+d1*b2,a1*c2+c1*d2,b1*c2+d1*d2,a1*e2+c1*f2+e1,b1*e2+d1*f2+f1];
+}
+function transformPt(ctm,x,y){return[ctm[0]*x+ctm[2]*y+ctm[4],ctm[1]*x+ctm[3]*y+ctm[5]]}
+
+/* ========== SPOT COLOR DETECTION ========== */
+function detectSpotColors(rawBytes){
+  const text=latin1(rawBytes);
+  const spots=new Map();
+  const objToSpot=new Map();
+  let m;
+
+  // Strategy 1: find [/Separation /Name ...] arrays, then look backward for the obj number
+  const sepArrRe=/\[\s*\/Separation\s*\/(\S+?)\s*\//g;
+  while((m=sepArrRe.exec(text))!==null){
+    let name=m[1];
+    name=name.replace(/#([0-9A-Fa-f]{2})/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
+    // Scan backward from match position to find the nearest "NN 0 obj"
+    const before=text.substring(Math.max(0,m.index-200),m.index);
+    const allObj=[...before.matchAll(/(\d+)\s+0\s+obj/g)];
+    if(allObj.length>0){
+      const objNum=parseInt(allObj[allObj.length-1][1]);
+      objToSpot.set(objNum,name);
+    }
+  }
+
+  // Find ColorSpace dict entries: /CSn ref → map csLabel to spot name
+  const csRe=/\/ColorSpace\s*<<([\s\S]*?)>>/g;
+  while((m=csRe.exec(text))!==null){
+    const d=m[1];
+    const eRe=/\/(CS\d+)\s+(\d+)\s+\d+\s+R/g;
+    let e;
+    while((e=eRe.exec(d))!==null){
+      const csLabel=e[1],objNum=parseInt(e[2]);
+      if(objToSpot.has(objNum)){
+        const name=objToSpot.get(objNum);
+        if(!spots.has(name))spots.set(name,{spotName:name,csLabel,objNum});
+      }
+    }
+  }
+
+  // Strategy 2: inline separations /CSn [/Separation /Name ...]
+  const inRe=/\/(CS\d+)\s*\[\s*\/Separation\s*\/(\S+?)\s/g;
+  while((m=inRe.exec(text))!==null){
+    let name=m[2].replace(/#([0-9A-Fa-f]{2})/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
+    if(!spots.has(name))spots.set(name,{spotName:name,csLabel:m[1],objNum:-1});
+  }
+
+  // Strategy 3: if ColorSpace dicts didn't yield a csLabel, scan content streams
+  // for /CSn CS usage and match against known obj refs
+  if(spots.size===0&&objToSpot.size>0){
+    // Find all /CSn NN 0 R anywhere (not just in ColorSpace dicts)
+    const anyRef=/\/(CS\d+)\s+(\d+)\s+\d+\s+R/g;
+    while((m=anyRef.exec(text))!==null){
+      const csLabel=m[1],objNum=parseInt(m[2]);
+      if(objToSpot.has(objNum)){
+        const name=objToSpot.get(objNum);
+        if(!spots.has(name))spots.set(name,{spotName:name,csLabel,objNum});
+      }
+    }
+  }
+
+  return[...spots.values()];
+}
+
+/* ========== CONTENT STREAM TOKENIZER ========== */
+function tokenize(text){
+  const toks=[];
+  let i=0;const n=text.length;
+  while(i<n){
+    const ch=text[i];
+    if(' \t\n\r\f\0'.includes(ch)){i++;continue}
+    if(ch==='%'){while(i<n&&text[i]!=='\n'&&text[i]!=='\r')i++;continue}
+    if(ch==='/'){let nm='/';i++;while(i<n&&!' \t\n\r\f\0/<>()[]{}%'.includes(text[i]))nm+=text[i++];toks.push({t:'name',v:nm});continue}
+    if(ch==='-'||ch==='+'||ch==='.'||(ch>='0'&&ch<='9')){
+      let s='';if(ch==='-'||ch==='+')s+=text[i++];
+      while(i<n&&((text[i]>='0'&&text[i]<='9')||text[i]==='.'))s+=text[i++];
+      toks.push({t:'num',v:parseFloat(s)});continue}
+    if(ch==='('){let d=1,s='(';i++;while(i<n&&d>0){if(text[i]==='\\'){s+=text[i++];if(i<n)s+=text[i++];continue}if(text[i]==='(')d++;if(text[i]===')')d--;s+=text[i++]}toks.push({t:'str',v:s});continue}
+    if(ch==='<'&&i+1<n&&text[i+1]!=='<'){let s='<';i++;while(i<n&&text[i]!=='>')s+=text[i++];if(i<n)s+=text[i++];toks.push({t:'hex',v:s});continue}
+    if(ch==='<'&&i+1<n&&text[i+1]==='<'){toks.push({t:'dict',v:'<<'});i+=2;continue}
+    if(ch==='>'&&i+1<n&&text[i+1]==='>'){toks.push({t:'dict',v:'>>'});i+=2;continue}
+    if(ch==='['||ch===']'){toks.push({t:'bracket',v:ch});i++;continue}
+    if((ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||ch==="'"||ch==='"'){
+      let kw='';while(i<n&&((text[i]>='a'&&text[i]<='z')||(text[i]>='A'&&text[i]<='Z')||text[i]==='*'||text[i]==="'"||text[i]==='"'||(text[i]>='0'&&text[i]<='9')))kw+=text[i++];
+      toks.push({t:'kw',v:kw});continue}
+    i++;
+  }
+  return toks;
+}
+
+function groupOps(toks){
+  const ops=[];let operands=[];
+  for(const tok of toks){
+    if(tok.t==='kw'){ops.push({op:tok.v,args:[...operands]});operands=[];}
+    else operands.push(tok);
+  }
+  return ops;
+}
+
+function serializeOps(ops){
+  const parts=[];
+  for(const o of ops){
+    const line=[];
+    for(const a of o.args){
+      if(a.t==='num')line.push(fmtNum(a.v));
+      else line.push(a.v);
+    }
+    line.push(o.op);
+    parts.push(line.join(' '));
+  }
+  return parts.join('\n')+'\n';
+}
+
+/* ========== BÉZIER MATH ========== */
+function evalCubic(v0,v1,v2,v3,t){
+  const mt=1-t;return mt*mt*mt*v0+3*mt*mt*t*v1+3*mt*t*t*v2+t*t*t*v3;
+}
+
+function splitAt(x0,y0,x1,y1,x2,y2,x3,y3,t){
+  const mt=1-t;
+  const ax=mt*x0+t*x1,ay=mt*y0+t*y1;
+  const bx=mt*x1+t*x2,by=mt*y1+t*y2;
+  const cx=mt*x2+t*x3,cy=mt*y2+t*y3;
+  const dx=mt*ax+t*bx,dy=mt*ay+t*by;
+  const ex=mt*bx+t*cx,ey=mt*by+t*cy;
+  const fx=mt*dx+t*ex,fy=mt*dy+t*ey;
+  return{
+    left:{x0,y0,x1:ax,y1:ay,x2:dx,y2:dy,x3:fx,y3:fy},
+    right:{x0:fx,y0:fy,x1:ex,y1:ey,x2:cx,y2:cy,x3,y3}
+  };
+}
+
+function subCurve(x0,y0,x1,y1,x2,y2,x3,y3,ta,tb){
+  if(Math.abs(tb-ta)<1e-12)return null;
+  let r;
+  if(ta<1e-12){r=splitAt(x0,y0,x1,y1,x2,y2,x3,y3,tb).left;}
+  else{
+    const rh=splitAt(x0,y0,x1,y1,x2,y2,x3,y3,ta).right;
+    const tb2=(tb-ta)/(1-ta);
+    r=splitAt(rh.x0,rh.y0,rh.x1,rh.y1,rh.x2,rh.y2,rh.x3,rh.y3,Math.min(tb2,1)).left;
+  }
+  return r;
+}
+
+// Find real roots of at³+bt²+ct+d=0 in [0,1] via sampling+bisection
+function cubicRoots01(a,b,c,d){
+  const EPS=1e-10;
+  function f(t){return((a*t+b)*t+c)*t+d}
+  const roots=[];const N=128;
+  // Check endpoints
+  if(Math.abs(f(0))<EPS)roots.push(0);
+  if(Math.abs(f(1))<EPS)roots.push(1);
+  let pv=f(0);
+  for(let i=1;i<=N;i++){
+    const t=i/N,v=f(t);
+    if(pv*v<0){
+      let lo=(i-1)/N,hi=t;
+      for(let j=0;j<50;j++){
+        const mid=(lo+hi)/2;
+        if(f(mid)*f(lo)<=0)hi=mid;else lo=mid;
+      }
+      const root=(lo+hi)/2;
+      // Avoid duplicate with endpoints
+      if(roots.length===0||Math.abs(root-roots[roots.length-1])>1e-8)
+        roots.push(root);
+    }
+    pv=v;
+  }
+  return roots.filter(t=>t>=-1e-8&&t<=1+1e-8).map(t=>Math.max(0,Math.min(1,t)));
+}
+
+function bezierCrossings(vals,k){
+  const[v0,v1,v2,v3]=vals;
+  const a=-v0+3*v1-3*v2+v3;
+  const b=3*v0-6*v1+3*v2;
+  const c=-3*v0+3*v1;
+  const d=v0-k;
+  return cubicRoots01(a,b,c,d);
+}
+
+/* ========== PATH CLIPPING ========== */
+function ptInRect(x,y,r){return x>=r.xMin-0.01&&x<=r.xMax+0.01&&y>=r.yMin-0.01&&y<=r.yMax+0.01}
+
+function clipBezierToRect(seg,rect){
+  const{from,cp1,cp2,to}=seg;
+  const xs=[from[0],cp1[0],cp2[0],to[0]];
+  const ys=[from[1],cp1[1],cp2[1],to[1]];
+  const crossings=new Set([0,1]);
+  for(const k of[rect.xMin,rect.xMax])
+    for(const t of bezierCrossings(xs,k))crossings.add(t);
+  for(const k of[rect.yMin,rect.yMax])
+    for(const t of bezierCrossings(ys,k))crossings.add(t);
+  const sorted=[...crossings].sort((a,b)=>a-b);
+  const result=[];
+  for(let i=0;i<sorted.length-1;i++){
+    const ta=sorted[i],tb=sorted[i+1];
+    if(tb-ta<1e-10)continue;
+    const tMid=(ta+tb)/2;
+    const mx=evalCubic(xs[0],xs[1],xs[2],xs[3],tMid);
+    const my=evalCubic(ys[0],ys[1],ys[2],ys[3],tMid);
+    if(ptInRect(mx,my,rect)){
+      const sc=subCurve(from[0],from[1],cp1[0],cp1[1],cp2[0],cp2[1],to[0],to[1],ta,tb);
+      if(sc)result.push({type:'C',from:[sc.x0,sc.y0],cp1:[sc.x1,sc.y1],cp2:[sc.x2,sc.y2],to:[sc.x3,sc.y3]});
+    }
+  }
+  return result;
+}
+
+function clipLineToRect(seg,rect){
+  const{from,to}=seg;
+  let tMin=0,tMax=1;
+  const dx=to[0]-from[0],dy=to[1]-from[1];
+  const edges=[[-dx,from[0]-rect.xMin],[dx,rect.xMax-from[0]],[-dy,from[1]-rect.yMin],[dy,rect.yMax-from[1]]];
+  for(const[p,q]of edges){
+    if(Math.abs(p)<1e-12){if(q<-0.01)return[];}
+    else{const t=q/p;if(p<0)tMin=Math.max(tMin,t);else tMax=Math.min(tMax,t);}
+  }
+  if(tMin>tMax+1e-10)return[];
+  tMin=Math.max(0,tMin);tMax=Math.min(1,tMax);
+  return[{type:'L',from:[from[0]+tMin*dx,from[1]+tMin*dy],to:[from[0]+tMax*dx,from[1]+tMax*dy]}];
+}
+
+function clipSegment(seg,rect){
+  if(seg.type==='C')return clipBezierToRect(seg,rect);
+  return clipLineToRect(seg,rect);
+}
+
+function clipSubpaths(subpaths,rect){
+  const result=[];
+  for(const sp of subpaths){
+    let cur=[];
+    for(const seg of sp.segments){
+      const clipped=clipSegment(seg,rect);
+      for(const cs of clipped){
+        if(cur.length>0){
+          const lastEnd=cur[cur.length-1].to;
+          if(Math.hypot(lastEnd[0]-cs.from[0],lastEnd[1]-cs.from[1])>0.1){
+            result.push(cur);cur=[];
+          }
+        }
+        cur.push(cs);
+      }
+    }
+    if(cur.length>0)result.push(cur);
+  }
+  return result;
+}
+
+/* ========== PATH EXTRACTION ========== */
+function extractPaths(pathOps,ctm){
+  const subpaths=[];
+  let cur=[],cp=[0,0],spStart=[0,0];
+  function tx(x,y){return transformPt(ctm,x,y)}
+  for(const o of pathOps){
+    const nums=o.args.filter(a=>a.t==='num').map(a=>a.v);
+    switch(o.op){
+      case 'm':
+        if(cur.length>0)subpaths.push({segments:cur,closed:false});
+        cur=[];cp=tx(nums[0],nums[1]);spStart=[...cp];break;
+      case 'l':{const e=tx(nums[0],nums[1]);cur.push({type:'L',from:[...cp],to:e});cp=e;break}
+      case 'c':{const c1=tx(nums[0],nums[1]),c2=tx(nums[2],nums[3]),e=tx(nums[4],nums[5]);cur.push({type:'C',from:[...cp],cp1:c1,cp2:c2,to:e});cp=e;break}
+      case 'v':{const c1=[...cp],c2=tx(nums[0],nums[1]),e=tx(nums[2],nums[3]);cur.push({type:'C',from:[...cp],cp1:c1,cp2:c2,to:e});cp=e;break}
+      case 'y':{const c1=tx(nums[0],nums[1]),e=tx(nums[2],nums[3]),c2=[...e];cur.push({type:'C',from:[...cp],cp1:c1,cp2:c2,to:e});cp=e;break}
+      case 'h':
+        if(Math.hypot(cp[0]-spStart[0],cp[1]-spStart[1])>0.01)
+          cur.push({type:'L',from:[...cp],to:[...spStart]});
+        cp=[...spStart];
+        if(cur.length>0){subpaths.push({segments:cur,closed:true});cur=[];}
+        break;
+      case 're':{
+        const[x,y,w,h]=nums;
+        const p1=tx(x,y),p2=tx(x+w,y),p3=tx(x+w,y+h),p4=tx(x,y+h);
+        if(cur.length>0)subpaths.push({segments:cur,closed:false});
+        subpaths.push({segments:[
+          {type:'L',from:p1,to:p2},{type:'L',from:p2,to:p3},
+          {type:'L',from:p3,to:p4},{type:'L',from:p4,to:p1}
+        ],closed:true});
+        cur=[];cp=[...p1];spStart=[...p1];break}
+    }
+  }
+  if(cur.length>0)subpaths.push({segments:cur,closed:false});
+  return subpaths;
+}
+
+/* ========== CONTENT STREAM PROCESSOR ========== */
+const PATH_OPS=new Set(['m','l','c','v','y','h','re']);
+const PAINT_OPS=new Set(['S','s','f','F','f*','B','B*','b','b*','n']);
+const STROKE_PAINTS=new Set(['S','s','B','B*','b','b*']);
+
+function processContentStream(streamText,targetCSLabel,clipRect,addInner,addOuter,outerOffset){
+  const toks=tokenize(streamText);
+  const ops=groupOps(toks);
+
+  // Graphics state tracking
+  const stateStack=[{ctm:[1,0,0,1,0,0],strokeCS:null,fillCMYK:null}];
+  const cur=()=>stateStack[stateStack.length-1];
+
+  const output=[];
+  const allCutPaths=[];  // extracted in page coords
+  let pathBuf=[];
+
+  // Helper: check if path geometry extends beyond clipRect
+  function pathExceedsClip(pathOps,ctm){
+    for(const o of pathOps){
+      const nums=o.args.filter(a=>a.t==='num').map(a=>a.v);
+      let coords=[];
+      if(o.op==='m'||o.op==='l')coords=[[nums[0],nums[1]]];
+      else if(o.op==='c')coords=[[nums[0],nums[1]],[nums[2],nums[3]],[nums[4],nums[5]]];
+      else if(o.op==='v')coords=[[nums[0],nums[1]],[nums[2],nums[3]]];
+      else if(o.op==='y')coords=[[nums[0],nums[1]],[nums[2],nums[3]]];
+      else if(o.op==='re')coords=[[nums[0],nums[1]],[nums[0]+nums[2],nums[1]+nums[3]]];
+      for(const[x,y]of coords){
+        const px=ctm[0]*x+ctm[2]*y+ctm[4];
+        const py=ctm[1]*x+ctm[3]*y+ctm[5];
+        if(px<clipRect.xMin-1||px>clipRect.xMax+1||py<clipRect.yMin-1||py>clipRect.yMax+1)
+          return true;
+      }
+    }
+    return false;
+  }
+
+  // Helper: check if fill color is transparent (0,0,0,0 CMYK)
+  function isTransparentFill(){
+    const fc=cur().fillCMYK;
+    return fc&&fc[0]===0&&fc[1]===0&&fc[2]===0&&fc[3]===0;
+  }
+
+  for(const o of ops){
+    // Path construction → buffer
+    if(PATH_OPS.has(o.op)){pathBuf.push(o);continue}
+
+    // Paint operator → decide
+    if(PAINT_OPS.has(o.op)){
+      const isStrokeOp=STROKE_PAINTS.has(o.op);
+      const isCut=isStrokeOp&&cur().strokeCS==='/'+targetCSLabel;
+
+      if(isCut){
+        // Add implicit close for s/b/b*
+        if('s'===o.op||'b'===o.op||'b*'===o.op)
+          pathBuf.push({op:'h',args:[]});
+        // Extract geometry
+        const paths=extractPaths(pathBuf,cur().ctm);
+        allCutPaths.push(...paths);
+        // For combined fill+stroke, keep the fill only if it doesn't exceed clip
+        if(o.op==='B'||o.op==='b'||o.op==='B*'||o.op==='b*'){
+          if(!isTransparentFill()||!pathExceedsClip(pathBuf,cur().ctm)){
+            output.push(...pathBuf);
+            if(o.op==='b'||o.op==='b*')output.push({op:'h',args:[]});
+            output.push({op:o.op==='B'||o.op==='b'?'f':o.op==='B*'||o.op==='b*'?'f*':'f',args:[]});
+          }
+        }
+        // For pure strokes (S, s): just discard path+paint
+      } else if(o.op==='f'||o.op==='F'||o.op==='f*'){
+        // Check if this is a transparent fill with oversized geometry
+        // (Illustrator pattern: transparent fill paired with CS0 cut stroke)
+        if(isTransparentFill()&&pathExceedsClip(pathBuf,cur().ctm)){
+          // Drop this fill — it's the invisible companion of a cut path
+        } else {
+          output.push(...pathBuf);
+          output.push(o);
+        }
+      } else {
+        output.push(...pathBuf);
+        output.push(o);
+      }
+      pathBuf=[];
+      continue;
+    }
+
+    // Non-path, non-paint: flush buffer, output, update state
+    if(pathBuf.length>0){output.push(...pathBuf);pathBuf=[];}
+    output.push(o);
+
+    switch(o.op){
+      case 'q':stateStack.push(JSON.parse(JSON.stringify(cur())));break;
+      case 'Q':if(stateStack.length>1)stateStack.pop();break;
+      case 'cm':{
+        const nums=o.args.filter(a=>a.t==='num').map(a=>a.v);
+        if(nums.length>=6)cur().ctm=multiplyCTM(cur().ctm,nums.slice(0,6));
+        break}
+      case 'CS':{
+        const nm=o.args.find(a=>a.t==='name');
+        if(nm)cur().strokeCS=nm.v;
+        break}
+      case 'K':cur().strokeCS=null;break;
+      case 'RG':cur().strokeCS=null;break;
+      case 'G':cur().strokeCS=null;break;
+      case 'k':{
+        const nums=o.args.filter(a=>a.t==='num').map(a=>a.v);
+        if(nums.length>=4)cur().fillCMYK=nums.slice(0,4);
+        break}
+      case 'rg':case 'g':case 'cs':case 'scn':case 'sc':
+        cur().fillCMYK=null;break;
+    }
+  }
+  if(pathBuf.length>0)output.push(...pathBuf);
+
+  // Clip extracted paths
+  const clipped=clipSubpaths(allCutPaths,clipRect);
+
+  // Generate ops for clipped paths
+  const appended=[];
+  if(clipped.length>0||addInner||addOuter){
+    // Set line width and spot color
+    appended.push({op:'q',args:[]});
+    appended.push({op:'CS',args:[{t:'name',v:'/'+targetCSLabel}]});
+    appended.push({op:'SCN',args:[{t:'num',v:1}]});
+
+    // Clipped cut paths
+    for(const sp of clipped){
+      if(sp.length===0)continue;
+      appended.push({op:'m',args:[{t:'num',v:sp[0].from[0]},{t:'num',v:sp[0].from[1]}]});
+      for(const seg of sp){
+        if(seg.type==='L'){
+          appended.push({op:'l',args:[{t:'num',v:seg.to[0]},{t:'num',v:seg.to[1]}]});
+        } else {
+          appended.push({op:'c',args:[
+            {t:'num',v:seg.cp1[0]},{t:'num',v:seg.cp1[1]},
+            {t:'num',v:seg.cp2[0]},{t:'num',v:seg.cp2[1]},
+            {t:'num',v:seg.to[0]},{t:'num',v:seg.to[1]}
+          ]});
+        }
+      }
+      appended.push({op:'S',args:[]});
+    }
+
+    // Inner bounding box
+    if(addInner){
+      appended.push({op:'re',args:[
+        {t:'num',v:clipRect.xMin},{t:'num',v:clipRect.yMin},
+        {t:'num',v:clipRect.xMax-clipRect.xMin},{t:'num',v:clipRect.yMax-clipRect.yMin}
+      ]});
+      appended.push({op:'S',args:[]});
+    }
+
+    // Outer bounding box
+    if(addOuter){
+      const off=outerOffset;
+      appended.push({op:'re',args:[
+        {t:'num',v:clipRect.xMin-off},{t:'num',v:clipRect.yMin-off},
+        {t:'num',v:(clipRect.xMax-clipRect.xMin)+2*off},{t:'num',v:(clipRect.yMax-clipRect.yMin)+2*off}
+      ]});
+      appended.push({op:'S',args:[]});
+    }
+
+    appended.push({op:'Q',args:[]});
+  }
+
+  const finalOps=[...output,...appended];
+  return{
+    streamText:serializeOps(finalOps),
+    originalCutPaths:allCutPaths,
+    clippedPaths:clipped,
+    stats:{original:allCutPaths.length,clipped:clipped.length}
+  };
+}
+
+/* ========== PDF PROCESSING ========== */
+function getStreamBytes(pdfDoc,entry){
+  const{PDFRef,PDFArray,PDFName}=PDFLib;
+  let refs=[];
+  if(entry instanceof PDFRef)refs=[entry];
+  else if(entry instanceof PDFArray)refs=entry.asArray();
+  else return null;
+
+  let all=new Uint8Array(0);
+  for(const ref of refs){
+    const obj=pdfDoc.context.lookup(ref);
+    if(!obj||!obj.contents)continue;
+    let bytes;
+    const filter=obj.dict?obj.dict.get(PDFName.of('Filter')):null;
+    if(filter&&filter.toString()==='/FlateDecode'){
+      try{bytes=pako.inflate(obj.contents)}catch(e){bytes=obj.contents}
+    } else {
+      bytes=obj.contents;
+    }
+    const combined=new Uint8Array(all.length+bytes.length+1);
+    combined.set(all);combined[all.length]=32;combined.set(bytes,all.length+1);
+    all=combined;
+  }
+  return all;
+}
+
+function replaceContentStream(pdfDoc,page,contentStr){
+  const{PDFDict,PDFName,PDFNumber,PDFRawStream}=PDFLib;
+  const raw=toBytes(contentStr);
+  const deflated=pako.deflate(raw);
+  const dict=PDFDict.withContext(pdfDoc.context);
+  dict.set(PDFName.of('Filter'),PDFName.of('FlateDecode'));
+  dict.set(PDFName.of('Length'),PDFNumber.of(deflated.length));
+  const stream=PDFRawStream.of(dict,deflated);
+  const ref=pdfDoc.context.register(stream);
+  page.node.set(PDFName.of('Contents'),ref);
+}
+
+/* ========== PREVIEW ========== */
+function drawPreview(canvas,pageW,pageH,clipRect,origPaths,clippedPaths,addInner,addOuter,outerOffset){
+  const ctx=canvas.getContext('2d');
+  // Scale to fit canvas
+  const pad=10;
+  const maxW=canvas.width-2*pad,maxH=canvas.height-2*pad;
+  const scale=Math.min(maxW/pageW,maxH/pageH);
+  const ox=pad+(maxW-pageW*scale)/2;
+  const oy=pad+(maxH-pageH*scale)/2;
+
+  function sx(x){return ox+x*scale}
+  function sy(y){return oy+(pageH-y)*scale} // PDF y is bottom-up
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Page background
+  ctx.fillStyle='#fff';
+  ctx.fillRect(sx(0),sy(pageH),pageW*scale,pageH*scale);
+  ctx.strokeStyle='#d2d2d7';ctx.lineWidth=1;
+  ctx.strokeRect(sx(0),sy(pageH),pageW*scale,pageH*scale);
+
+  // Draw paths helper
+  function drawPaths(paths,color,lw){
+    ctx.strokeStyle=color;ctx.lineWidth=lw;
+    for(const sp of paths){
+      for(const seg of sp.segments||sp){
+        ctx.beginPath();
+        const f=seg.from||[0,0];
+        ctx.moveTo(sx(f[0]),sy(f[1]));
+        if(seg.type==='L'){
+          ctx.lineTo(sx(seg.to[0]),sy(seg.to[1]));
+        } else if(seg.type==='C'){
+          ctx.bezierCurveTo(sx(seg.cp1[0]),sy(seg.cp1[1]),sx(seg.cp2[0]),sy(seg.cp2[1]),sx(seg.to[0]),sy(seg.to[1]));
+        }
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Original cut paths (red, thin)
+  const flatOrig=origPaths.map(sp=>sp.segments?sp.segments:sp).flat();
+  drawPaths(origPaths.map(sp=>sp.segments||[]),'rgba(220,40,40,0.3)',0.5);
+
+  // Clipped paths (green)
+  drawPaths(clippedPaths,'rgba(0,160,60,0.9)',1.5);
+
+  // Clip rect
+  ctx.strokeStyle='rgba(0,113,227,0.4)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+  ctx.strokeRect(sx(clipRect.xMin),sy(clipRect.yMax),
+    (clipRect.xMax-clipRect.xMin)*scale,(clipRect.yMax-clipRect.yMin)*scale);
+  ctx.setLineDash([]);
+
+  // Inner bbox
+  if(addInner){
+    ctx.strokeStyle='rgba(0,113,227,0.8)';ctx.lineWidth=1.5;
+    ctx.strokeRect(sx(clipRect.xMin),sy(clipRect.yMax),
+      (clipRect.xMax-clipRect.xMin)*scale,(clipRect.yMax-clipRect.yMin)*scale);
+  }
+
+  // Outer bbox
+  if(addOuter){
+    ctx.strokeStyle='rgba(0,113,227,0.4)';ctx.lineWidth=1;ctx.setLineDash([6,3]);
+    const off=outerOffset;
+    ctx.strokeRect(sx(clipRect.xMin-off),sy(clipRect.yMax+off),
+      (clipRect.xMax-clipRect.xMin+2*off)*scale,(clipRect.yMax-clipRect.yMin+2*off)*scale);
+    ctx.setLineDash([]);
+  }
+}
+
+/* ========== UI ========== */
+let pdfDoc=null,rawBytes=null,spotColors=[],pageData=[];
+let selectedSpot=null,currentPreviewPage=0;
+
+const $=id=>document.getElementById(id);
+function log(msg){const s=$('status');s.style.display='block';s.textContent+=msg+'\n';s.scrollTop=s.scrollHeight;}
+
+// Drop zone
+const dz=$('dropzone'),fi=$('fileInput');
+dz.addEventListener('click',()=>fi.click());
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0])});
+fi.addEventListener('change',()=>{if(fi.files.length)loadFile(fi.files[0])});
+
+async function loadFile(file){
+  $('status').textContent='';$('status').style.display='none';
+  log('Loading '+file.name+'...');
+  try{
+    const ab=await file.arrayBuffer();
+    rawBytes=new Uint8Array(ab);
+    pdfDoc=await PDFLib.PDFDocument.load(rawBytes.slice(0),{updateMetadata:false});
+    const pages=pdfDoc.getPages();
+    const pg0=pages[0];
+    const{width,height}=pg0.getSize();
+
+    // Show file info
+    const ig=$('infoGrid');
+    ig.innerHTML=`
+      <span class="label">File:</span><span>${file.name}</span>
+      <span class="label">Pages:</span><span>${pages.length}</span>
+      <span class="label">Page size:</span><span>${(width/72).toFixed(2)}″ × ${(height/72).toFixed(2)}″ (${Math.round(width)} × ${Math.round(height)} pts)</span>
+    `;
+    window._loadedFileName=file.name;
+    $('fileInfo').style.display='';
+
+    // Detect spots
+    spotColors=detectSpotColors(rawBytes);
+    log('Detected '+spotColors.length+' spot color(s): '+spotColors.map(s=>s.spotName).join(', '));
+
+    const sl=$('spotList');sl.innerHTML='';
+    if(spotColors.length===0){
+      sl.innerHTML='<li style="color:#e94560">No spot/separation colors found in this PDF.</li>';
+      $('spotPanel').style.display='';
+      return;
+    }
+    for(const s of spotColors){
+      const li=document.createElement('li');
+      li.innerHTML=`<span class="dot" style="background:${s.spotName.toLowerCase()==='white'?'#fff':s.spotName.toLowerCase()==='cutcontour'?'#f0f':'#ccc'}"></span>
+        <span><strong>${s.spotName}</strong> <span style="color:#666;font-size:11px">(${s.csLabel})</span></span>`;
+      li.addEventListener('click',()=>selectSpot(s,li));
+      sl.appendChild(li);
+    }
+    $('spotPanel').style.display='';
+    // Auto-select if only one
+    if(spotColors.length===1)selectSpot(spotColors[0],sl.children[0]);
+  }catch(err){
+    log('ERROR: '+err.message);console.error(err);
+  }
+}
+
+function selectSpot(spot,li){
+  selectedSpot=spot;
+  document.querySelectorAll('.spot-list li').forEach(el=>el.classList.remove('selected'));
+  if(li)li.classList.add('selected');
+  log('Selected spot: '+spot.spotName+' ('+spot.csLabel+')');
+
+  // Extract cut paths from all pages
+  const pages=pdfDoc.getPages();
+  pageData=[];
+  for(let i=0;i<pages.length;i++){
+    const page=pages[i];
+    const{width,height}=page.getSize();
+    const entry=page.node.get(PDFLib.PDFName.of('Contents'));
+    const bytes=getStreamBytes(pdfDoc,entry);
+    if(!bytes){log('  Page '+(i+1)+': could not read content stream');pageData.push(null);continue}
+    const text=latin1(bytes);
+    // Quick count: how many paths use this spot
+    const re=new RegExp('\\/'+spot.csLabel+'\\s+CS','g');
+    const matches=text.match(re);
+    const count=matches?matches.length:0;
+
+    // Extract paths (light pass — just extract, don't modify)
+    const toks=tokenize(text);
+    const ops=groupOps(toks);
+    const stateStack=[{ctm:[1,0,0,1,0,0],strokeCS:null,fillCMYK:null}];
+    const cur=()=>stateStack[stateStack.length-1];
+    const cutPaths=[];
+    let pathBuf=[];
+    for(const o of ops){
+      if(PATH_OPS.has(o.op)){pathBuf.push(o);continue}
+      if(PAINT_OPS.has(o.op)){
+        if(STROKE_PAINTS.has(o.op)&&cur().strokeCS==='/'+spot.csLabel){
+          if('s'===o.op||'b'===o.op||'b*'===o.op)pathBuf.push({op:'h',args:[]});
+          cutPaths.push(...extractPaths(pathBuf,cur().ctm));
+        } else if((o.op==='f'||o.op==='F'||o.op==='f*')&&cur().fillCMYK){
+          const fc=cur().fillCMYK;
+          if(fc[0]===0&&fc[1]===0&&fc[2]===0&&fc[3]===0){
+            // Check if this transparent fill exceeds page bounds (companion of cut path)
+            const paths=extractPaths(pathBuf,cur().ctm);
+            let exceeds=false;
+            for(const sp of paths){
+              for(const seg of sp.segments){
+                const pts=[seg.from,seg.to];
+                if(seg.cp1)pts.push(seg.cp1);if(seg.cp2)pts.push(seg.cp2);
+                for(const[px,py]of pts){
+                  if(px<-1||px>width+1||py<-1||py>height+1){exceeds=true;break}}
+                if(exceeds)break}
+              if(exceeds)break}
+            if(exceeds)cutPaths.push(...paths);
+          }
+        }
+        pathBuf=[];continue;
+      }
+      if(pathBuf.length)pathBuf=[];
+      switch(o.op){
+        case 'q':stateStack.push(JSON.parse(JSON.stringify(cur())));break;
+        case 'Q':if(stateStack.length>1)stateStack.pop();break;
+        case 'cm':{const nums=o.args.filter(a=>a.t==='num').map(a=>a.v);if(nums.length>=6)cur().ctm=multiplyCTM(cur().ctm,nums.slice(0,6));break}
+        case 'CS':{const nm=o.args.find(a=>a.t==='name');if(nm)cur().strokeCS=nm.v;break}
+        case 'K':case 'RG':case 'G':cur().strokeCS=null;break;
+        case 'k':{const nums=o.args.filter(a=>a.t==='num').map(a=>a.v);if(nums.length>=4)cur().fillCMYK=nums.slice(0,4);break}
+        case 'rg':case 'g':case 'cs':case 'scn':case 'sc':cur().fillCMYK=null;break;
+      }
+    }
+
+    pageData.push({width,height,streamText:text,cutPaths,csUsages:count});
+    log('  Page '+(i+1)+': '+cutPaths.length+' cut subpath(s), '+width/72+'″×'+height/72+'″');
+  }
+
+  currentPreviewPage=0;
+  $('clipPanel').style.display='';
+  $('previewPanel').style.display='';
+  $('actionPanel').style.display='';
+  updatePreview();
+}
+
+function getClipRect(pageW,pageH){
+  const mode=document.querySelector('input[name=clipMode]:checked').value;
+  let bleed=0;
+  if(mode==='bleed')bleed=numVal($('bleedVal'))*72; // inches to pts
+  return{xMin:-bleed,yMin:-bleed,xMax:pageW+bleed,yMax:pageH+bleed};
+}
+
+function updatePreview(){
+  if(!pageData.length||!selectedSpot)return;
+  const pi=currentPreviewPage;
+  const pd=pageData[pi];
+  if(!pd)return;
+
+  const clipRect=getClipRect(pd.width,pd.height);
+  const outerOffset=18; // 1/4" = 18pt
+  const addInner=$('chkInner').checked;
+  const addOuter=$('chkOuter').checked;
+
+  const clipped=clipSubpaths(pd.cutPaths,clipRect);
+
+  // Count original segments outside
+  let totalOrigSegs=0;
+  for(const sp of pd.cutPaths)totalOrigSegs+=sp.segments.length;
+  let totalClipSegs=0;
+  for(const sp of clipped)totalClipSegs+=sp.length;
+
+  // Preview
+  const canvas=$('previewCanvas');
+  // Size canvas proportionally
+  const aspect=pd.width/pd.height;
+  const maxH=550;
+  canvas.height=maxH;
+  canvas.width=Math.max(120,Math.round(maxH*aspect));
+
+  drawPreview(canvas,pd.width,pd.height,clipRect,pd.cutPaths,clipped,addInner,addOuter,outerOffset);
+
+  // Stats
+  $('previewStats').innerHTML=`
+    <div>Original subpaths: <span class="val">${pd.cutPaths.length}</span></div>
+    <div>Original segments: <span class="val">${totalOrigSegs}</span></div>
+    <div>Clipped subpaths: <span class="val">${clipped.length}</span></div>
+    <div>Clipped segments: <span class="val">${totalClipSegs}</span></div>
+    <div>Clip boundary: <span class="val">${(clipRect.xMax-clipRect.xMin)/72}″ × ${(clipRect.yMax-clipRect.yMin)/72}″</span></div>
+  `;
+
+  // Page nav
+  const nPages=pageData.length;
+  $('pageLabel').textContent='Page '+(pi+1)+' / '+nPages;
+  $('prevPage').disabled=pi===0;
+  $('nextPage').disabled=pi>=nPages-1;
+}
+
+// Settings change → update preview
+document.querySelectorAll('input[name=clipMode]').forEach(r=>r.addEventListener('change',updatePreview));
+$('bleedVal').addEventListener('input',updatePreview);
+$('chkInner').addEventListener('change',updatePreview);
+$('chkOuter').addEventListener('change',updatePreview);
+$('prevPage').addEventListener('click',()=>{if(currentPreviewPage>0){currentPreviewPage--;updatePreview()}});
+$('nextPage').addEventListener('click',()=>{if(currentPreviewPage<pageData.length-1){currentPreviewPage++;updatePreview()}});
+
+// Process & Download
+$('processBtn').addEventListener('click',async()=>{
+  if(!pdfDoc||!selectedSpot||!pageData.length)return;
+  $('processBtn').disabled=true;
+  $('processBtn').textContent='Processing...';
+  log('\nProcessing all pages...');
+
+  try{
+    // Reload PDF fresh (pdf-lib load detaches ArrayBuffer)
+    const outDoc=await PDFLib.PDFDocument.load(rawBytes.slice(0),{updateMetadata:false});
+    const pages=outDoc.getPages();
+    const addInner=$('chkInner').checked;
+    const addOuter=$('chkOuter').checked;
+    const outerOffset=18;
+
+    for(let i=0;i<pages.length;i++){
+      const pd=pageData[i];
+      if(!pd){log('  Skipping page '+(i+1));continue}
+      const clipRect=getClipRect(pd.width,pd.height);
+
+      const result=processContentStream(pd.streamText,selectedSpot.csLabel,clipRect,addInner,addOuter,outerOffset);
+      log('  Page '+(i+1)+': '+result.stats.original+' original → '+result.stats.clipped+' clipped subpaths');
+
+      replaceContentStream(outDoc,pages[i],result.streamText);
+
+      // Expand MediaBox if bounding boxes extend beyond
+      const{PDFName}=PDFLib;
+      let expand=0;
+      if(addOuter)expand=outerOffset;
+      const bleed=getClipRect(pd.width,pd.height);
+      const mbx=bleed.xMin-expand, mby=bleed.yMin-expand;
+      const mbw=bleed.xMax+expand, mbh=bleed.yMax+expand;
+      if(mbx<0||mby<0||mbw>pd.width||mbh>pd.height){
+        pages[i].node.set(PDFName.of('MediaBox'),outDoc.context.obj([mbx,mby,mbw,mbh]));
+        pages[i].node.set(PDFName.of('TrimBox'),outDoc.context.obj([mbx,mby,mbw,mbh]));
+        pages[i].node.set(PDFName.of('BleedBox'),outDoc.context.obj([mbx,mby,mbw,mbh]));
+      }
+    }
+
+    const outBytes=await outDoc.save({useObjectStreams:false});
+    log('Done! Output: '+(outBytes.length/1024).toFixed(0)+' KB');
+
+    // Download
+    const blob=new Blob([outBytes],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    const baseName=(window._loadedFileName||'output').replace(/\.pdf$/i,'');
+    a.download=baseName+'_clipped.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+    log('Download started.');
+  }catch(err){
+    log('ERROR: '+err.message);
+    console.error(err);
+  }
+
+  $('processBtn').disabled=false;
+  $('processBtn').textContent='Process & Download';
+});
+
+})();
+</script>
+</body>
+</html>
